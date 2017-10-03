@@ -1,0 +1,72 @@
+#Predicting Form on Weightlifting
+
+##Exective Summary
+We examined the data of personal fitness devices to see if we can correctly categorize whether or not they were doing a specific type of movement correctly.  We examined a simple Classification tree model that performed at a 50% accuracy rate, then examined a more in-depth random forest that performed at 99% accuracy for our witheld validation test.  
+
+## Data
+
+To begin we will load the data and libraries needed to run our analysis.  We'll also do some data clean up where we'll eliminate columns that will have minimal predictave value, either due to identifying characteristics, missing values, or just a lack of variance in the variables.  Finally, we'll split the training data into 2 sets, a training set (75% of data) and a  validation set (25% of data).  
+
+```{r cache=TRUE}
+  suppressPackageStartupMessages(library(caret))
+  suppressPackageStartupMessages(library(lattice))
+  suppressPackageStartupMessages(library(dplyr))
+  suppressPackageStartupMessages(library(parallel))
+  suppressPackageStartupMessages(library(doParallel))
+   
+  train <- read.csv('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv', 
+              na.strings=c('#DIV/0', '', 'NA'), stringsAsFactors = F)
+  
+test <- read.csv('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv',
+                na.strings= c('#DIV/0', '', 'NA'), stringsAsFactors = F)
+
+#remove columns that seem to have no predictive value
+train_adj <- train[, c(-1:-7, -12:-36, -50:-59, -69:-83, -87:-101, -103:-112, -125:-139, -141:-150)]
+nochange <- nearZeroVar(train_adj, saveMetrics = TRUE)
+train_adj <- train_adj[, !(nochange$nzv)]
+train_adj$classe <- as.factor(train_adj$classe)
+
+#split training into training and a validation set
+inTrain <- createDataPartition(y=train_adj$classe, p=.75, list=FALSE)
+mytrain <- train_adj[inTrain, ]
+myvalid <- train_adj[-inTrain, ]
+
+```
+
+##Model fitting
+
+
+Model 1 will be constructed using a Classification Tree.
+```{r cache=TRUE}
+  fitTree <- train(classe ~ ., method = "rpart", data=mytrain)
+  predTreetrain  <- predict(fitTree, newdata = mytrain)
+  table(mytrain$classe, predTreetrain)
+  mod1acc <- sum(mytrain$classe == predTreetrain) / dim(mytrain)[1]
+  predTreeValid <- predict(fitTree, newdata = myvalid)
+  mod1acc_valid <- sum(myvalid$classe == predTreeValid) / dim(myvalid)[1]
+```
+
+The model produced a accuracy on the validation set of **`r mod1acc_valid * 100`**%.
+
+NOt great, and I think we can do better.
+
+
+Model 2 will use a Random Forest technique.
+```{r cache=TRUE}
+  cluster <- makeCluster(detectCores()-1)
+  registerDoParallel(cluster)
+  fitControl <- trainControl(method = "cv", number = 3)
+  fitRF <- train(classe ~ ., method = "rf", data=mytrain, prox=TRUE, trControl = fitControl)
+  stopCluster(cluster)
+  registerDoSEQ()
+  
+  predRFtrain  <- predict(fitRF, newdata = mytrain)
+  table(mytrain$classe, predRFtrain)
+  mod2acc <- sum(mytrain$classe == predRFtrain) / dim(mytrain)[1]
+  predRFValid <- predict(fitRF, newdata = myvalid)
+  mod2acc_valid <- sum(myvalid$classe == predRFValid) / dim(myvalid)[1]
+```
+
+The model produced a accuracy on the validation set of **`r mod2acc_valid * 100`**%.
+
+Very impressive.  
